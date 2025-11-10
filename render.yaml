@@ -1,0 +1,21 @@
+services:
+  # Cron job to update Shopify product metafields from tags
+  # Runs daily at 6:00 PM UTC (adjust schedule as needed)
+  - type: cron
+    name: shopify-metafield-updater
+    env: node
+    # Schedule: Daily at 6:00 PM UTC
+    # For Hong Kong (HKT = UTC+8): Use "0 10 * * *" for 6:00 PM HKT
+    # For multiple times: "0 2,10,14,18 * * *"
+    schedule: "0 18 * * *"
+    buildCommand: npm install
+    startCommand: node bulk-update-metafields-from-tags.js
+    # Node.js version (optional, defaults to latest LTS)
+    runtime: node
+    # Environment variables (set these in Render dashboard)
+    envVars:
+      - key: SHOP_URL
+        sync: false  # Set manually in Render dashboard
+      - key: ACCESS_TOKEN
+        sync: false  # Set manually in Render dashboard
+

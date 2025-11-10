@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Job Label (must be unique) -->
+    <key>Label</key>
+    <string>com.sheer.metafield-updater</string>
+    
+    <!-- Program to run -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/cp12-crystal-mac/Documents/x/SHEER/Taiga-WIP/run-scheduled-update.sh</string>
+    </array>
+    
+    <!-- Schedule: Run daily at 6:00 PM -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>18</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    
+    <!-- Working Directory -->
+    <key>WorkingDirectory</key>
+    <string>/Users/cp12-crystal-mac/Documents/x/SHEER/Taiga-WIP</string>
+    
+    <!-- Standard Output Log -->
+    <key>StandardOutPath</key>
+    <string>/Users/cp12-crystal-mac/Documents/x/SHEER/Taiga-WIP/logs/launchd-stdout.log</string>
+    
+    <!-- Standard Error Log -->
+    <key>StandardErrorPath</key>
+    <string>/Users/cp12-crystal-mac/Documents/x/SHEER/Taiga-WIP/logs/launchd-stderr.log</string>
+    
+    <!-- Run even if the previous instance hasn't finished -->
+    <key>RunAtLoad</key>
+    <false/>
+    
+    <!-- Keep the job loaded -->
+    <key>KeepAlive</key>
+    <false/>
+</dict>
+</plist>
+

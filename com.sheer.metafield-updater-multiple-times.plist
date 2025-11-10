@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Job Label (must be unique) -->
+    <key>Label</key>
+    <string>com.sheer.metafield-updater</string>
+    
+    <!-- Program to run -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/cp12-crystal-mac/Documents/x/SHEER/Taiga-WIP/run-scheduled-update.sh</string>
+    </array>
+    
+    <!-- Schedule: Run multiple times per day -->
+    <!-- Will try at 10 AM, 2 PM, 6 PM, and 10 PM -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <!-- 10:00 AM -->
+        <dict>
+            <key>Hour</key>
+            <integer>10</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <!-- 2:00 PM -->
+        <dict>
+            <key>Hour</key>
+            <integer>14</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <!-- 6:00 PM -->
+        <dict>
+            <key>Hour</key>
+            <integer>18</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <!-- 10:00 PM -->
+        <dict>
+            <key>Hour</key>
+            <integer>22</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+    </array>
+    
+    <!-- Working Directory -->
+    <key>WorkingDirectory</key>
+    <string>/Users/cp12-crystal-mac/Documents/x/SHEER/Taiga-WIP</string>
+    
+    <!-- Standard Output Log -->
+    <key>StandardOutPath</key>
+    <string>/Users/cp12-crystal-mac/Documents/x/SHEER/Taiga-WIP/logs/launchd-stdout.log</string>
+    
+    <!-- Standard Error Log -->
+    <key>StandardErrorPath</key>
+    <string>/Users/cp12-crystal-mac/Documents/x/SHEER/Taiga-WIP/logs/launchd-stderr.log</string>
+    
+    <!-- Run even if the previous instance hasn't finished -->
+    <key>RunAtLoad</key>
+    <false/>
+    
+    <!-- Keep the job loaded -->
+    <key>KeepAlive</key>
+    <false/>
+</dict>
+</plist>
+

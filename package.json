@@ -1,0 +1,21 @@
+{
+  "name": "shopify-metafield-bulk-update",
+  "version": "1.0.0",
+  "description": "Bulk update Shopify product metafields based on product tags",
+  "main": "bulk-update-metafields-from-tags.js",
+  "scripts": {
+    "start": "node bulk-update-metafields-from-tags.js",
+    "test": "node bulk-update-metafields-from-tags.js --dry-run",
+    "update": "node bulk-update-metafields-from-tags.js",
+    "dry-run": "node bulk-update-metafields-from-tags.js --dry-run",
+    "fix-padding-level": "node bulk-update-padding-level-fix.js",
+    "fix-padding-level-dry": "node bulk-update-padding-level-fix.js --dry-run"
+  },
+  "dependencies": {
+    "node-fetch": "^2.6.7",
+    "dotenv": "^16.0.3"
+  },
+  "keywords": ["shopify", "metafields", "bulk-update", "automation"],
+  "author": "",
+  "license": "MIT"
+}
