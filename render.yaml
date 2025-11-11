@@ -4,10 +4,9 @@ services:
   - type: cron
     name: shopify-metafield-updater
     env: node
-    # Schedule: Daily at 6:00 PM UTC
-    # For Hong Kong (HKT = UTC+8): Use "0 10 * * *" for 6:00 PM HKT
-    # For multiple times: "0 2,10,14,18 * * *"
-    schedule: "0 18 * * *"
+    # Schedule: 4 times daily at Hong Kong Time: 9am, 3pm, 6pm, 12am
+    # HKT (UTC+8): 9am=1UTC, 3pm=7UTC, 6pm=10UTC, 12am=16UTC
+    schedule: "0 1,7,10,16 * * *"
     buildCommand: npm install
     startCommand: node bulk-update-metafields-from-tags.js
     # Node.js version (optional, defaults to latest LTS)
