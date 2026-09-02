@@ -1,6 +1,11 @@
 const fetch = require('node-fetch');
 require('dotenv').config();
 
+const {
+  loadMetafieldCategoryConstraints,
+  getCategoryRecommendation,
+} = require('./metafield-category-constraints.js');
+
 // Configuration - Load from .env file
 const SHOP_URL = process.env.SHOP_URL;
 const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
@@ -66,6 +71,8 @@ const TAG_METAFIELD_MAPPINGS = {
   
 };
 
+const CATEGORY_RETRY_DAYS = 7;
+
 // GraphQL queries
 const GET_PRODUCTS_QUERY = `
   query getProducts($first: Int!, $after: String) {
@@ -78,6 +85,10 @@ const GET_PRODUCTS_QUERY = `
           tags
           productType
           createdAt
+          category {
+            id
+            fullName
+          }
           metafields(first: 50) {
             edges {
               node {
@@ -152,9 +163,140 @@ function isMetafieldValidForProductType(mapping, productType) {
 
 // Check if product was created within the last 24 hours
 function isCreatedWithin24Hours(createdAt) {
+  return isCreatedWithinDays(createdAt, 1);
+}
+
+function isCreatedWithinDays(createdAt, days) {
   const productCreatedTime = new Date(createdAt);
-  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  return productCreatedTime >= twentyFourHoursAgo;
+  const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  return productCreatedTime >= cutoff;
+}
+
+function hasMetafieldMappingTags(product) {
+  return product.tags.some((tag) => TAG_METAFIELD_MAPPINGS[tag]);
+}
+
+function buildMetafieldUpdatePlan(product, options = {}) {
+  const { verbose = false } = options;
+  const existingMetafields = new Map();
+
+  if (product.metafields && product.metafields.edges) {
+    product.metafields.edges.forEach((edge) => {
+      const key = `${edge.node.namespace}.${edge.node.key}`;
+      existingMetafields.set(key, edge.node.value);
+    });
+  }
+
+  const metafieldMap = new Map();
+  let hasMappings = false;
+
+  for (const tag of product.tags) {
+    const mapping = TAG_METAFIELD_MAPPINGS[tag];
+    if (!mapping) {
+      continue;
+    }
+
+    const key = `${mapping.namespace}.${mapping.key}`;
+
+    if (!isMetafieldValidForProductType(mapping, product.productType)) {
+      if (verbose) {
+        console.log(`  ⏭️  Skipping ${mapping.namespace}.${mapping.key} - not valid for product type "${product.productType}" (from tag: ${tag})`);
+      }
+      continue;
+    }
+
+    hasMappings = true;
+
+    if (metafieldMap.has(key)) {
+      const existing = metafieldMap.get(key);
+      const existingValues = JSON.parse(existing.value);
+      const newValues = [...new Set([...existingValues, ...mapping.value])];
+      existing.value = JSON.stringify(newValues);
+      if (verbose) {
+        console.log(`  → Merging ${mapping.namespace}.${mapping.key} += "${mapping.value}" (from tag: ${tag})`);
+      }
+    } else {
+      metafieldMap.set(key, {
+        namespace: mapping.namespace,
+        key: mapping.key,
+        value: JSON.stringify(mapping.value),
+        type: mapping.type,
+      });
+      if (verbose) {
+        console.log(`  → Setting ${mapping.namespace}.${mapping.key} = "${mapping.value}" (from tag: ${tag})`);
+      }
+    }
+  }
+
+  const metafieldsToUpdate = [];
+  let alreadyCorrectCount = 0;
+
+  for (const [key, metafield] of metafieldMap) {
+    const existingValue = existingMetafields.get(key);
+
+    if (existingValue && metafieldValuesMatch(existingValue, metafield.value)) {
+      if (verbose) {
+        console.log(`  ✓ Skipping ${key} - already has correct value`);
+      }
+      alreadyCorrectCount++;
+    } else {
+      metafieldsToUpdate.push(metafield);
+    }
+  }
+
+  return {
+    hasMappings,
+    metafieldsToUpdate,
+    alreadyCorrectCount,
+  };
+}
+
+function isCategoryRetryCandidate(product, constraints) {
+  if (isCreatedWithin24Hours(product.createdAt)) {
+    return false;
+  }
+
+  if (!isCreatedWithinDays(product.createdAt, CATEGORY_RETRY_DAYS)) {
+    return false;
+  }
+
+  if (!hasMetafieldMappingTags(product)) {
+    return false;
+  }
+
+  const plan = buildMetafieldUpdatePlan(product);
+  if (!plan.hasMappings || plan.metafieldsToUpdate.length === 0) {
+    return false;
+  }
+
+  const requiredFieldKeys = plan.metafieldsToUpdate.map((field) => `${field.namespace}.${field.key}`);
+  const categoryInfo = getCategoryRecommendation(product, requiredFieldKeys, constraints);
+  return !categoryInfo.blockedByCategory;
+}
+
+function getProductsToProcess(products, constraints) {
+  const selected = [];
+  const seen = new Set();
+
+  const recentProducts = products.filter((product) => isCreatedWithin24Hours(product.createdAt));
+  for (const product of recentProducts) {
+    seen.add(product.id);
+    selected.push({ product, reason: 'new' });
+  }
+
+  const retryProducts = products.filter(
+    (product) => !seen.has(product.id) && isCategoryRetryCandidate(product, constraints)
+  );
+
+  for (const product of retryProducts) {
+    selected.push({ product, reason: 'category-retry' });
+  }
+
+  return {
+    selected,
+    recentCount: recentProducts.length,
+    retryCount: retryProducts.length,
+  };
 }
 
 // Helper function to make GraphQL requests
@@ -225,100 +367,52 @@ function metafieldValuesMatch(existingValue, newValue) {
 }
 
 // Update product metafields based on tags
-async function updateProductMetafields(product, dryRun = false) {
-  let metafields = [];
-  let updated = false;
-  let skippedCount = 0;
+async function updateProductMetafields(product, constraints, dryRun = false) {
+  const plan = buildMetafieldUpdatePlan(product, { verbose: true });
+  const { metafieldsToUpdate, alreadyCorrectCount } = plan;
 
-  // Build a map of existing metafields for quick lookup
-  const existingMetafields = new Map();
-  if (product.metafields && product.metafields.edges) {
-    product.metafields.edges.forEach(edge => {
-      const key = `${edge.node.namespace}.${edge.node.key}`;
-      existingMetafields.set(key, edge.node.value);
-    });
-  }
+  if (metafieldsToUpdate.length > 0) {
+    const requiredFieldKeys = metafieldsToUpdate.map((field) => `${field.namespace}.${field.key}`);
+    const categoryInfo = getCategoryRecommendation(product, requiredFieldKeys, constraints);
 
-  // Build metafields map to consolidate duplicate keys
-  const metafieldMap = new Map();
-  
-  // Check each tag for metafield mappings
-  for (const tag of product.tags) {
-    if (TAG_METAFIELD_MAPPINGS[tag]) {
-      const mapping = TAG_METAFIELD_MAPPINGS[tag];
-      const key = `${mapping.namespace}.${mapping.key}`;
-      
-      // Filter by product type to prevent "Owner subtype" errors
-      const isValidForProductType = isMetafieldValidForProductType(mapping, product.productType);
-      if (!isValidForProductType) {
-        console.log(`  ⏭️  Skipping ${mapping.namespace}.${mapping.key} - not valid for product type "${product.productType}" (from tag: ${tag})`);
-        continue;
-      }
-      
-      if (metafieldMap.has(key)) {
-        // Merge values for list types (like underwear_features)
-        const existing = metafieldMap.get(key);
-        const existingValues = JSON.parse(existing.value);
-        const newValues = [...new Set([...existingValues, ...mapping.value])]; // Remove duplicates
-        existing.value = JSON.stringify(newValues);
-        console.log(`  → Merging ${mapping.namespace}.${mapping.key} += "${mapping.value}" (from tag: ${tag})`);
-      } else {
-        // First occurrence of this metafield
-        metafieldMap.set(key, {
-          namespace: mapping.namespace,
-          key: mapping.key,
-          value: JSON.stringify(mapping.value), // Convert array to JSON string for list types
-          type: mapping.type
-        });
-        console.log(`  → Setting ${mapping.namespace}.${mapping.key} = "${mapping.value}" (from tag: ${tag})`);
-      }
-      updated = true;
+    if (categoryInfo.blockedByCategory) {
+      console.warn(`  ⏭️  Skipping metafield update - Product category ${categoryInfo.status}`);
+      console.warn(`      Current:   ${categoryInfo.currentCategory}`);
+      console.warn(`      Suggested: ${categoryInfo.suggestedCategory}`);
+      return { updated: false, skippedCategory: true };
     }
-  }
-  
-  // Filter out metafields that already have the correct value
-  const metafieldsToUpdate = [];
-  for (const [key, metafield] of metafieldMap) {
-    const existingValue = existingMetafields.get(key);
-    
-    if (existingValue && metafieldValuesMatch(existingValue, metafield.value)) {
-      console.log(`  ✓ Skipping ${key} - already has correct value`);
-      skippedCount++;
-    } else {
-      metafieldsToUpdate.push(metafield);
-    }
-  }
-  
-  metafields = metafieldsToUpdate;
 
-  if (metafields.length > 0) {
     if (dryRun) {
-      console.log(`  🔍 Would update ${metafields.length} metafield(s) on ${product.handle} (DRY RUN)`);
-    } else {
-      try {
-        const result = await graphqlRequest(UPDATE_PRODUCT_METAFIELDS_MUTATION, {
-          input: {
-            id: product.id,
-            metafields: metafields
-          }
-        });
-
-        if (result.productUpdate.userErrors.length > 0) {
-          console.error(`  ❌ Errors updating ${product.handle}:`, result.productUpdate.userErrors);
-        } else {
-          console.log(`  ✅ Updated ${metafields.length} metafield(s) on ${product.handle}`);
-        }
-      } catch (error) {
-        console.error(`  ❌ Failed to update ${product.handle}:`, error.message);
-      }
+      console.log(`  🔍 Would update ${metafieldsToUpdate.length} metafield(s) on ${product.handle} (DRY RUN)`);
+      return { updated: true, skippedCategory: false, dryRun: true };
     }
-    return true;
-  } else if (skippedCount > 0) {
-    console.log(`  ℹ️  All ${skippedCount} metafield(s) already correct for ${product.handle}`);
-    return false;
+
+    try {
+      const result = await graphqlRequest(UPDATE_PRODUCT_METAFIELDS_MUTATION, {
+        input: {
+          id: product.id,
+          metafields: metafieldsToUpdate,
+        },
+      });
+
+      if (result.productUpdate.userErrors.length > 0) {
+        console.error(`  ❌ Errors updating ${product.handle}:`, result.productUpdate.userErrors);
+        return { updated: false, skippedCategory: false, failed: true };
+      }
+
+      console.log(`  ✅ Updated ${metafieldsToUpdate.length} metafield(s) on ${product.handle}`);
+      return { updated: true, skippedCategory: false };
+    } catch (error) {
+      console.error(`  ❌ Failed to update ${product.handle}:`, error.message);
+      return { updated: false, skippedCategory: false, failed: true };
+    }
   }
 
-  return false;
+  if (alreadyCorrectCount > 0) {
+    console.log(`  ℹ️  All ${alreadyCorrectCount} metafield(s) already correct for ${product.handle}`);
+  }
+
+  return { updated: false, skippedCategory: false };
 }
 
 // Main function
@@ -331,38 +425,62 @@ async function main(dryRun = false) {
   }
 
   try {
+    const constraints = await loadMetafieldCategoryConstraints();
+
     // Get all products
     console.log('📦 Fetching all products...');
     const products = await getAllProducts();
     console.log(`📦 Found ${products.length} products total`);
 
-    // Filter for products created within last 24 hours
-    const recentProducts = products.filter(product => isCreatedWithin24Hours(product.createdAt));
-    console.log(`📅 ${recentProducts.length} products created within last 24 hours\n`);
+    const { selected, recentCount, retryCount } = getProductsToProcess(products, constraints);
+    console.log(`📅 ${recentCount} product(s) created within last 24 hours`);
+    console.log(`🔁 ${retryCount} product(s) eligible for ${CATEGORY_RETRY_DAYS}-day category retry\n`);
 
-    if (recentProducts.length === 0) {
-      console.log('⚠️  No products found that were created within the last 24 hours. Nothing to process.\n');
+    if (selected.length === 0) {
+      console.log('⚠️  No products to process.\n');
       return;
     }
 
-    // Process each recent product
     let processedCount = 0;
     let updatedCount = 0;
+    let skippedCategoryCount = 0;
+    let failedCount = 0;
+    let retryUpdatedCount = 0;
 
-    for (const product of recentProducts) {
+    for (const entry of selected) {
       processedCount++;
-      console.log(`[${processedCount}/${recentProducts.length}] Processing: ${product.handle} (created: ${product.createdAt})`);
+      const { product, reason } = entry;
+      const reasonLabel = reason === 'category-retry' ? 'category retry' : 'new product';
+      console.log(`[${processedCount}/${selected.length}] Processing (${reasonLabel}): ${product.handle} (created: ${product.createdAt})`);
 
-      const wasUpdated = await updateProductMetafields(product, dryRun);
-      if (wasUpdated) {
+      const result = await updateProductMetafields(product, constraints, dryRun);
+      if (result.updated) {
         updatedCount++;
+        if (reason === 'category-retry') {
+          retryUpdatedCount++;
+        }
+      }
+      if (result.skippedCategory) {
+        skippedCategoryCount++;
+      }
+      if (result.failed) {
+        failedCount++;
       }
 
-      // Add delay to avoid rate limits
       await new Promise(resolve => setTimeout(resolve, 100));
     }
 
     console.log(`\n✅ Completed! Updated ${updatedCount} out of ${processedCount} products (from ${products.length} total products in store).`);
+    if (retryUpdatedCount > 0) {
+      console.log(`🔁 Category retry updates: ${retryUpdatedCount}`);
+    }
+    if (skippedCategoryCount > 0) {
+      console.log(`⏭️  Skipped ${skippedCategoryCount} product(s) due to missing/wrong Product category.`);
+      console.log(`   Will retry automatically for up to ${CATEGORY_RETRY_DAYS} days after product creation once category is fixed.`);
+    }
+    if (failedCount > 0) {
+      console.log(`❌ Failed ${failedCount} product(s). Check logs above.`);
+    }
 
   } catch (error) {
     console.error('❌ Script failed:', error);
@@ -375,4 +493,11 @@ if (require.main === module) {
   main(dryRun);
 }
 
-module.exports = { main, TAG_METAFIELD_MAPPINGS };
+module.exports = {
+  main,
+  TAG_METAFIELD_MAPPINGS,
+  CATEGORY_RETRY_DAYS,
+  getProductsToProcess,
+  isCategoryRetryCandidate,
+  buildMetafieldUpdatePlan,
+};

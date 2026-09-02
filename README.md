@@ -11,12 +11,16 @@ When products are tagged in Shopify (e.g. `Bra-padded`, `Und-high-rise`), this s
 **Workflow:**
 
 1. Connects to the SHEER Shopify store via the Admin API
-2. Fetches all products and filters to those **created within the last 24 hours**
+2. Fetches all products and processes:
+   - **New:** created within the last **24 hours**
+   - **Retry:** created within the last **7 days**, previously blocked by category, now with a valid category and pending metafields
 3. Checks each product's tags against a predefined mapping table
 4. Updates matching metafields (skips values that are already correct)
 5. Logs progress and any errors
 
-**Why only the last 24 hours?** Newly imported or created products are the ones that need metafields set. Running daily catches anything added since the last run without re-processing the entire catalog.
+**Product category required:** Metafields are restricted to specific Shopify Product categories (Settings → Custom data). The script loads those rules from Shopify and **skips** products with a missing or invalid category instead of failing with `Owner subtype does not match the metafield definition's constraints`. Once category is fixed, the cron **retries automatically for up to 7 days** after the product was created.
+
+**Why only the last 24 hours for new products?** Newly imported or created products are the ones that need metafields set. The **7-day retry window** catches products whose category was fixed after the first cron run.
 
 ### Tag → Metafield Mappings
 
@@ -34,6 +38,7 @@ To add or change a mapping, edit the `TAG_METAFIELD_MAPPINGS` object in `bulk-up
 
 - **Dry-run mode** — preview changes without writing anything
 - **Smart updates** — skips metafields that already have the correct value
+- **Category validation** — skips products until Product category matches Shopify metafield settings
 - **Rate limiting** — avoids hitting Shopify API limits
 - **Validation** — checks credentials and configuration before running
 
