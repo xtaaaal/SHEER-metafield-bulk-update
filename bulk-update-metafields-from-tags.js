@@ -63,12 +63,9 @@ const TAG_METAFIELD_MAPPINGS = {
   'Und-full-coverage': { namespace: 'custom', key: 'coverage', value: ['Full Coverage'], type: 'list.single_line_text_field' },
   
   // Lounge Fit (list type) - Updated to match Shopify validations
-  'Lounge-relaxed-fit': { namespace: 'custom', key: 'fit', value: ['Relaxed Fit'], type: 'list.single_line_text_field' },
-  'Lounge-slim-fit': { namespace: 'custom', key: 'fit', value: ['Slim Fit'], type: 'list.single_line_text_field' },
+  'Lounge-relaxed': { namespace: 'custom', key: 'fit', value: ['Relaxed Fit'], type: 'list.single_line_text_field' },
+  'Lounge-slim': { namespace: 'custom', key: 'fit', value: ['Slim Fit'], type: 'list.single_line_text_field' },
   'Lounge-body-hugging': { namespace: 'custom', key: 'fit', value: ['Body Hugging'], type: 'list.single_line_text_field' },
-  
-  
-  
 };
 
 const CATEGORY_RETRY_DAYS = 7;
@@ -500,4 +497,7 @@ module.exports = {
   getProductsToProcess,
   isCategoryRetryCandidate,
   buildMetafieldUpdatePlan,
+  hasMetafieldMappingTags,
+  getAllProducts,
+  updateProductMetafields,
 };

@@ -8,6 +8,10 @@
     "test": "node bulk-update-metafields-from-tags.js --dry-run",
     "update": "node bulk-update-metafields-from-tags.js",
     "dry-run": "node bulk-update-metafields-from-tags.js --dry-run",
+    "sync-all-dry": "node sync-all-products-metafields.js --dry-run",
+    "sync-all": "node sync-all-products-metafields.js",
+    "sync-lounge-fit-dry": "node sync-lounge-fit-metafields.js --dry-run",
+    "sync-lounge-fit": "node sync-lounge-fit-metafields.js",
     "fix-padding-level": "node bulk-update-padding-level-fix.js",
     "fix-padding-level-dry": "node bulk-update-padding-level-fix.js --dry-run"
   },

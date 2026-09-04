@@ -30,7 +30,15 @@ Mappings are defined in `bulk-update-metafields-from-tags.js`. Current mappings:
 |----------|------------------------|-------------------|
 | **Bras** | `Bra-padded`, `Bra-wireless`, `Bra-light-support` | `custom.padding_level`, `custom.support_level`, `custom.wiring`, `shopify.bra-features` |
 | **Underwear** | `Und-low-rise`, `Und-cheeky`, `Und-full-coverage` | `custom.rise`, `custom.coverage` |
-| **Lounge** | `Lounge-slim-fit`, `Lounge-body-hugging` | `custom.fit` |
+| **Lounge** | `Lounge-relaxed`, `Lounge-slim`, `Lounge-body-hugging` | `custom.fit` |
+
+**Lounge Fit** (`custom.fit`):
+
+| Product tag | Metafield value |
+|-------------|-----------------|
+| `Lounge-relaxed` | Relaxed Fit |
+| `Lounge-slim` | Slim Fit |
+| `Lounge-body-hugging` | Body Hugging |
 
 To add or change a mapping, edit the `TAG_METAFIELD_MAPPINGS` object in `bulk-update-metafields-from-tags.js`.
 
@@ -193,7 +201,11 @@ launchctl unload ~/Library/LaunchAgents/com.sheer.metafield-updater.plist
 | Command | What it does |
 |---------|-------------|
 | `npm run dry-run` | Preview updates without writing (always run this first) |
-| `npm run update` | Apply metafield updates to Shopify |
+| `npm run update` | Apply metafield updates to Shopify (24h new + 7-day category retry) |
+| `npm run sync-all-dry` | Preview updates for **all products** with matching tags (no date limit) |
+| `npm run sync-all` | Apply metafield updates for **all products** with matching tags |
+| `npm run sync-lounge-fit-dry` | Preview **Lounge Fit** products only (`custom.fit` from Lounge tags) |
+| `npm run sync-lounge-fit` | Apply **Lounge Fit** metafield updates only |
 | `npm run fix-padding-level-dry` | Preview a targeted fix for `Bra-open` padding level |
 | `npm run fix-padding-level` | Apply the targeted padding level fix |
 
